@@ -233,6 +233,19 @@ class Engine(BaseEngine):
     def flip_horizontally(self):
         self.image = self.image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
 
+    def get_transparent_palette_index(self):
+        # Returns the index of the first fully transparent palette entry,
+        # or None when the palette has none.
+        palette = self.image.getpalette("RGBA")
+        if not palette:
+            return None
+
+        for index in range(len(palette) // 4):
+            if palette[index * 4 + 3] == 0:
+                return index
+
+        return None
+
     def get_default_extension(self):
         # extension is not present => force JPEG or PNG
 
@@ -277,6 +290,17 @@ class Engine(BaseEngine):
                     else None
                 )
                 self.image = self.image.quantize(method=quantize_method)
+                # quantize() keeps the alpha of fully transparent entries
+                # in the palette but does not set info["transparency"], so
+                # the GIF writer would encode them as opaque. Restore the
+                # index so GIF output keeps its transparent pixels.
+                if (
+                    (requested_extension or self.extension) == ".gif"
+                    and "transparency" not in self.image.info
+                ):
+                    transparent_index = self.get_transparent_palette_index()
+                    if transparent_index is not None:
+                        self.image.info["transparency"] = transparent_index
 
         ext = requested_extension or self.get_default_extension()
 
